@@ -25,7 +25,8 @@ import (
 	"mcp-tiime/internal/tools"
 )
 
-const version = "0.1.0"
+// version is set at build time with -ldflags "-X main.version=...".
+var version = "dev"
 
 func main() {
 	command := ""

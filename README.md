@@ -11,6 +11,7 @@ the accounting firm. **92 tools**, MFA login included.
 
 ## Contents
 
+- [Installation](#installation)
 - [Quick start](#quick-start)
 - [Example requests](#example-requests)
 - [Tools](#tools)
@@ -20,7 +21,36 @@ the accounting firm. **92 tools**, MFA login included.
 - [Behaviors to know](#behaviors-to-know)
 - [Development](#development)
 
-## Quick start
+## Installation
+
+### Prebuilt binaries
+
+Each [release](https://github.com/eko/mcp-tiime/releases) ships binaries for Linux, macOS and
+Windows (amd64 and arm64), with a `checksums.txt` file.
+
+```bash
+tar -xzf mcp-tiime_<version>_darwin_arm64.tar.gz
+./mcp-tiime login
+```
+
+### Docker
+
+A multi-arch image (`linux/amd64`, `linux/arm64`) is published on GitHub Container Registry.
+The session cache and downloads live in `/data`, so keep it in a volume:
+
+```bash
+# First login, interactive
+docker run --rm -it -v mcp-tiime:/data ghcr.io/eko/mcp-tiime login
+
+# MCP server over stdio
+claude mcp add tiime -- docker run --rm -i -v mcp-tiime:/data ghcr.io/eko/mcp-tiime
+```
+
+`upload_document` reads files from the container: mount the folder that holds your receipts
+(for instance `-v "$HOME/Documents:$HOME/Documents:ro"`) and pass absolute paths. Mount a host
+folder on `/data/downloads` to get the downloaded PDFs on your machine.
+
+### From source
 
 Requirements: Go 1.27 or later.
 
@@ -33,6 +63,8 @@ go build -o bin/mcp-tiime ./cmd/mcp-tiime
 # Check: lists the companies the account can access
 ./bin/mcp-tiime check
 ```
+
+## Quick start
 
 ### Claude Code
 

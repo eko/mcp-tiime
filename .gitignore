@@ -2,3 +2,4 @@ bin/
 *.pdf
 token.json
 .env
+dist/

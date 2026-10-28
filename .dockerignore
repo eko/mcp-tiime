@@ -1,0 +1,7 @@
+.git
+.github
+bin/
+dist/
+*.pdf
+token.json
+.env
