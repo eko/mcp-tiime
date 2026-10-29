@@ -34,6 +34,17 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Claude Desktop extension
+        run: |
+          scripts/package-mcpb.sh "${GITHUB_REF_NAME#v}"
+          gh release upload "$GITHUB_REF_NAME" dist/mcp-tiime.mcpb dist/mcp-tiime.mcpb.sha256 --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   docker:
     name: Docker image
     runs-on: ubuntu-latest

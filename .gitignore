@@ -3,3 +3,4 @@ bin/
 token.json
 .env
 dist/
+.DS_Store

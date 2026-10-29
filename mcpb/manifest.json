@@ -1,0 +1,65 @@
+{
+  "manifest_version": "0.3",
+  "name": "mcp-tiime",
+  "display_name": "Tiime (community)",
+  "version": "0.0.0",
+  "description": "Drive your Tiime account from Claude: invoices, bank transactions, receipts, expense reports, VAT and your accounting firm.",
+  "long_description": "Community MCP server for [Tiime](https://www.tiime.fr), with 92 tools: invoices and quotes, bank transactions and receipt matching, expense reports and mileage allowances, categories and rules, VAT estimate and exchanges with the accounting firm.\n\nTwo-factor authentication is supported: when Tiime asks for a code, Claude calls `start_login`, reads the code you received (for instance with the Gmail connector) and calls `complete_login`. Your password stays in the extension settings and never goes through the conversation.\n\n**Unofficial**: this project is not affiliated with Tiime. It uses the internal API of the Tiime web application, which may change without notice.",
+  "author": {
+    "name": "Vincent Composieux",
+    "url": "https://github.com/eko"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eko/mcp-tiime.git"
+  },
+  "homepage": "https://github.com/eko/mcp-tiime",
+  "documentation": "https://github.com/eko/mcp-tiime/blob/main/docs/claude-desktop-extension.md",
+  "support": "https://github.com/eko/mcp-tiime/issues",
+  "license": "MIT",
+  "keywords": ["tiime", "accounting", "invoicing", "bank", "receipts", "vat", "expense reports"],
+  "privacy_policies": ["https://www.tiime.fr/politique-de-confidentialite"],
+  "server": {
+    "type": "binary",
+    "entry_point": "server/mcp-tiime",
+    "mcp_config": {
+      "command": "${__dirname}/server/mcp-tiime",
+      "args": [],
+      "env": {
+        "TIIME_EMAIL": "${user_config.email}",
+        "TIIME_PASSWORD": "${user_config.password}",
+        "TIIME_COMPANY_ID": "${user_config.company_id}"
+      },
+      "platform_overrides": {
+        "win32": {
+          "command": "${__dirname}/server/mcp-tiime.exe"
+        }
+      }
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "win32"]
+  },
+  "user_config": {
+    "email": {
+      "type": "string",
+      "title": "Tiime email",
+      "description": "Email address of your Tiime account.",
+      "required": true
+    },
+    "password": {
+      "type": "string",
+      "title": "Tiime password",
+      "description": "Stored by Claude Desktop in your system keychain. Used to log in again when the session expires.",
+      "sensitive": true,
+      "required": true
+    },
+    "company_id": {
+      "type": "number",
+      "title": "Company ID",
+      "description": "Default company. Leave 0 to detect it, which works when the account has a single company.",
+      "default": 0,
+      "required": false
+    }
+  }
+}

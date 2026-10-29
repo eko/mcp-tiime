@@ -20,8 +20,17 @@ the accounting firm. **92 tools**, MFA login included.
 - [Configuration](#configuration)
 - [Behaviors to know](#behaviors-to-know)
 - [Development](#development)
+- [Contributing](#contributing)
+- [License](#license)
 
 ## Installation
+
+### Claude Desktop and Cowork (one-click)
+
+Download [`mcp-tiime.mcpb`](https://github.com/eko/mcp-tiime/releases/latest/download/mcp-tiime.mcpb)
+from the latest release and double-click it: Claude Desktop installs the extension and asks for
+your Tiime email and password. It works on macOS and Windows, in chats and in Cowork. See the
+[Claude Desktop extension guide](docs/claude-desktop-extension.md).
 
 ### Prebuilt binaries
 
@@ -95,6 +104,11 @@ After rebuilding, restart the server with `/mcp` → **tiime** → **Reconnect**
 
 `TIIME_EMAIL` and `TIIME_PASSWORD` are optional once a session was opened with
 `mcp-tiime login`. They let an agent log in again on its own when the session expires.
+
+### Other clients
+
+Cursor, VS Code, Windsurf, Zed, Codex CLI, Gemini CLI and any other stdio MCP client: see the
+[MCP clients guide](docs/mcp-clients.md).
 
 ## Example requests
 
@@ -279,5 +293,14 @@ golangci-lint run ./...     # v2.15 or later for Go 1.27
 
 To add a tool: add the method to the client in `internal/tiime`, declare it in the domain
 interface in `internal/tools`, register the tool in the domain `register…` function, then
-update the expected list of `TestRegisterListsTools`. Project conventions are described in
-[`CLAUDE.md`](CLAUDE.md).
+update the expected list of `TestRegisterListsTools`. Project conventions and the full checklist are
+described in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Contributing
+
+Contributions are welcome: see [`CONTRIBUTING.md`](CONTRIBUTING.md). Report security issues
+privately, as described in [`SECURITY.md`](SECURITY.md).
+
+## License
+
+[MIT](LICENSE). This project is not affiliated with Tiime.

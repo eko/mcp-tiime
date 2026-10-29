@@ -24,8 +24,17 @@ builds:
       - amd64
       - arm64
 
+# Fat macOS binary for the Claude Desktop extension, which can only pick a
+# binary per OS, not per CPU architecture. Not archived on its own.
+universal_binaries:
+  - id: mcp-tiime-universal
+    ids: [mcp-tiime]
+    name_template: mcp-tiime
+    replace: false
+
 archives:
   - id: mcp-tiime
+    ids: [mcp-tiime]
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
     formats: [tar.gz]
     format_overrides:
@@ -33,6 +42,7 @@ archives:
         formats: [zip]
     files:
       - README.md
+      - LICENSE
 
 checksum:
   name_template: checksums.txt

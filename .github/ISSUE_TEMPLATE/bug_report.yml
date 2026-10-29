@@ -1,0 +1,54 @@
+name: Bug report
+description: A tool fails or returns wrong data.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not paste credentials, tokens, IBANs or real account data.** Redact amounts, names
+        and IDs you do not want to make public. For a security issue, use the
+        [private report](https://github.com/eko/mcp-tiime/security/advisories/new) instead.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Release tag, or the server version shown by your MCP client.
+      placeholder: v0.2.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Installation
+      options:
+        - Claude Desktop extension (.mcpb)
+        - Prebuilt binary
+        - Docker image
+        - Built from source
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: MCP client
+      placeholder: Claude Desktop, Claude Code, Cursor…
+  - type: input
+    id: tool
+    attributes:
+      label: Tool
+      placeholder: list_bank_transactions
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: The arguments sent to the tool, the result or error message, and what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Server logs
+      description: The JSON logs written on stderr (in Claude Desktop, ~/Library/Logs/Claude/ or %APPDATA%\Claude\logs\). Redact them first.
+      render: shell
