@@ -28,12 +28,18 @@ const (
 // enabled and no refresh token is cached, as the password grant cannot complete it.
 var ErrMFARequired = errors.New("the Tiime account requires MFA: log in with the start_login tool or `mcp-tiime login`")
 
+// ErrLoginRequired is returned when no session is cached for an application
+// that only accepts the interactive login flow.
+var ErrLoginRequired = errors.New("no valid Tiime session: log in with the start_login tool or `mcp-tiime login`")
+
 // ErrMissingCredentials is returned when a login is needed but TIIME_EMAIL or
 // TIIME_PASSWORD is not set.
 var ErrMissingCredentials = errors.New("no valid Tiime session: run `mcp-tiime login`, or set TIIME_EMAIL and TIIME_PASSWORD on the server to log in with the start_login tool")
 
 // AuthConfig configures the Auth0 login against Tiime.
 type AuthConfig struct {
+	// App is the web application to log in as, ClientApp when zero.
+	App        App
 	AuthURL    string
 	ClientID   string
 	Email      string
@@ -110,6 +116,10 @@ func (a *Authenticator) AccessToken(
 		}
 	}
 
+	if a.cfg.app().LoginFlowOnly {
+		return "", ErrLoginRequired
+	}
+
 	if a.cfg.Email == "" || a.cfg.Password == "" {
 		return "", ErrMissingCredentials
 	}
@@ -138,6 +148,14 @@ func (a *Authenticator) Invalidate() {
 	if a.token != nil {
 		a.token.ExpiresAt = time.Time{}
 	}
+}
+
+func (c AuthConfig) app() App {
+	if c.App.Origin == "" {
+		return ClientApp
+	}
+
+	return c.App
 }
 
 func (a *Authenticator) grant(

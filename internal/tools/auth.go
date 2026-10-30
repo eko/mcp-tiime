@@ -41,10 +41,17 @@ type LoginOutput struct {
 	Next    string `json:"next"`
 }
 
+// loginHandler implements the login tools, shared by the client and expert modes.
+type loginHandler struct {
+	auth Auth
+}
+
 func registerAuth(
 	server *mcp.Server,
-	h *Handler,
+	auth Auth,
 ) {
+	h := &loginHandler{auth: auth}
+
 	mcp.AddTool(server, &mcp.Tool{
 		Name: "start_login",
 		Description: "Log in to Tiime with the credentials configured on the server. Call it when another Tiime tool fails " +
@@ -60,7 +67,7 @@ func registerAuth(
 }
 
 // StartLogin implements the start_login tool.
-func (h *Handler) StartLogin(
+func (h *loginHandler) StartLogin(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
 	in StartLoginInput,
@@ -74,7 +81,7 @@ func (h *Handler) StartLogin(
 }
 
 // CompleteLogin implements the complete_login tool.
-func (h *Handler) CompleteLogin(
+func (h *loginHandler) CompleteLogin(
 	ctx context.Context,
 	_ *mcp.CallToolRequest,
 	in CompleteLoginInput,

@@ -41,6 +41,9 @@ Both approaches share the session cache (`~/.config/mcp-tiime/token.json`), so t
 client use the same session. Credentials in a config file are stored in plain text: prefer a
 client that can prompt for secrets (VS Code inputs) or read them from your environment.
 
+Accounting firms on Tiime Expert add `TIIME_MODE=expert` to the environment, next to the
+credentials: see the [expert mode guide](expert-mode.md).
+
 The examples below show the credentials variables. Drop the `env` block for the session only
 approach. Every [configuration variable](../README.md#configuration) can be set the same way,
 for instance `TIIME_COMPANY_ID` when the account has several companies.

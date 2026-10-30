@@ -21,10 +21,6 @@ import (
 )
 
 const (
-	// webOrigin and redirectURI are the ones registered for the web application.
-	webOrigin   = "https://apps.tiime.fr"
-	redirectURI = webOrigin + "/auth-callback"
-
 	// DefaultMFAMethod is the verification method chosen when none is requested.
 	DefaultMFAMethod = "email"
 
@@ -61,17 +57,21 @@ func (a *Authenticator) StartLogin(
 
 	a.pending = nil
 
-	err := a.grant(ctx, map[string]string{
-		"grant_type": passwordGrant,
-		"client_id":  a.cfg.ClientID,
-		"username":   a.cfg.Email,
-		"password":   a.cfg.Password,
-		"scope":      scope,
-		"audience":   audience,
-		"realm":      realm,
-	})
-	if !errors.Is(err, ErrMFARequired) {
-		return nil, err
+	// The password grant logs in at once when MFA is off. Applications that
+	// refuse it always go through the login pages.
+	if !a.cfg.app().LoginFlowOnly {
+		err := a.grant(ctx, map[string]string{
+			"grant_type": passwordGrant,
+			"client_id":  a.cfg.ClientID,
+			"username":   a.cfg.Email,
+			"password":   a.cfg.Password,
+			"scope":      scope,
+			"audience":   audience,
+			"realm":      realm,
+		})
+		if !errors.Is(err, ErrMFARequired) {
+			return nil, err
+		}
 	}
 
 	if method == "" {
@@ -134,7 +134,7 @@ func (a *Authenticator) continueLogin(
 		"grant_type":    "authorization_code",
 		"client_id":     a.cfg.ClientID,
 		"code":          authCode,
-		"redirect_uri":  redirectURI,
+		"redirect_uri":  a.cfg.app().redirectURI(),
 		"code_verifier": flow.verifier,
 	})
 }
@@ -221,7 +221,7 @@ func (f *loginFlow) advance(
 			if err != nil {
 				return "", nil, err
 			}
-			if strings.HasPrefix(target, redirectURI) {
+			if strings.HasPrefix(target, f.cfg.app().redirectURI()) {
 				code, err := authorizationCode(target)
 				return code, nil, err
 			}
@@ -316,7 +316,7 @@ func (f *loginFlow) authenticate(
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Origin", webOrigin)
+	req.Header.Set("Origin", f.cfg.app().Origin)
 
 	resp, err := f.client.Do(req)
 	if err != nil {
@@ -361,7 +361,7 @@ func (f *loginFlow) authorizeURL(
 	query := url.Values{
 		"client_id":             {f.cfg.ClientID},
 		"response_type":         {"code"},
-		"redirect_uri":          {redirectURI},
+		"redirect_uri":          {f.cfg.app().redirectURI()},
 		"scope":                 {scope},
 		"audience":              {audience},
 		"realm":                 {realm},

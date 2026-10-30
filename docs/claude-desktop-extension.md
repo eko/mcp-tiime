@@ -33,6 +33,7 @@ chats and in Cowork tasks.
 
    | Setting | Purpose |
    |---|---|
+   | Mode | `client` for a company account (default), `expert` for an accounting firm on Tiime Expert (experimental, see the [expert mode guide](expert-mode.md)) |
    | Tiime email | Email address of your Tiime account |
    | Tiime password | Stored by Claude Desktop in the system keychain, used to log in again when the session expires |
    | Company ID | Default company. Keep `0` when the account has a single company: it is detected |

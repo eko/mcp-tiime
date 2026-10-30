@@ -197,3 +197,87 @@ the due date from `due_date_mode`.
 | `/wallet/…` (transfers, beneficiaries, strong authentication) | Money movements |
 | `POST …/estimated_vat/{id}/send`, `/cancel`, `/validate` | Tax returns |
 | `/accounts/companies/{c}/social/…` | Payroll, not accessible with the tested plan (`403`) |
+
+## Expert application
+
+`expert.tiime.fr` (Tiime Expert, for accounting firms) uses the same API and Auth0 tenant, with
+its own client. Extracted from its JavaScript code (version `5.66.0`); **never checked against
+a real account**.
+
+| Item | Value |
+|---|---|
+| OAuth client | `ExMoxAnc9Y8BstgApTW7VpiUh63gmPCd` (public), Auth0 SPA SDK |
+| Headers | `tiime-app: tiime-pro`, `tiime-app-version: 5.66.0:<build hash>` |
+| Password-realm grant | **refused** (`unauthorized_client`): every login goes through the pages |
+| `/co/authenticate` | accepted with `Origin: https://expert.tiime.fr` |
+| Redirect URI | `https://expert.tiime.fr/auth-callback` (registered; any other gives `403`) |
+
+Services are Angular classes with a `resourceUrl`: search the bundles for
+``resourceUrl=`api/v1/expert/…` `` to find a route and its methods. `${P}` in a URL stands for
+the company ID. The base service maps `getById`/`getAll` to `GET`, `getPaginated` to `GET` with
+`Range`, `create` to `POST`, `update` to `PATCH` and `delete` to `DELETE`. Lists across the
+portfolio take common filters: `contributor_ids` (`|`), `business_units` (**`,`**),
+`mission_ended`, `mission_works_stopped`, `in_creation_process`, `initialization_in_progress`.
+
+### Portfolio, tasks, time tracking
+
+| Method and route | Usage |
+|---|---|
+| `GET /expert/users/me` | Firm user |
+| `GET /expert/companies` | Client companies (`q`, `sorts=name:…`, `tax_regime_code`, `closing_month`, status flags) |
+| `GET /expert/companies/{c}` | Company (`expand=legal_company,pdp_config,thread`) |
+| `GET /expert/users/me/tasks` | Task plannings (`status`, `date`, `out_of_deadline`, `invoicing_status`, `responsable_ids`, `task_ids`…); `?company={c}` without `Range` for one company |
+| `GET /expert/users/me/tasks/totals` | `{amount, discount, amount_after_discount}` |
+| `POST /expert/tasks` | Task `{wording, deadline_date, company, time_tracking_task:{id}, time_tracking_invoicing_type:{id}, responsable, supervisor, invoicing_status, amount, discount, task_scheduler}`; recurrence `{interval, day (null = end of month), first_deadline_date, last_deadline_date \| occurence}` |
+| `PATCH / DELETE /expert/companies/{c}/tasks/{id}[?apply_nexts=<deadline>]` | Whole task body; `apply_nexts` also changes the next occurrences |
+| `POST /expert/companies/{c}/tasks/{id}/billing_point`, `/billing_unpoint` | Body `{}` |
+| `GET /expert/time_tracking/{categories,tasks,invoicing_types,duration_types}` | Reference data; tasks take `time_tracking`, `prestation` or `additional_mission=true` |
+| `GET /expert/time_tracking/records?user_id=&date=` | Records of a user for a day |
+| `PUT /expert/time_tracking/records` | Creates a record, or updates it when the body has an `id`; `duration` in minutes |
+| `DELETE /expert/time_tracking/records/{id}` | |
+| `POST /expert/time_tracking/records/validate` | `{start_date, end_date, user_ids, validated}` |
+| `GET /expert/time_tracking/records/days?owner_ids=&start_date=&end_date=` | `{date, validated, duration}` per day |
+| `GET /expert/companies/{c}/time_tracking/records`, `…/totals` | Time on a company (`date`, `user_id`, `gi_task_id`…) |
+
+### Accounting
+
+| Method and route | Usage |
+|---|---|
+| `GET /expert/companies/{c}/accounting_periods` | Fiscal years `{id, closed, start_date, end_date}` |
+| `GET /expert/companies/{c}/movements` | Entry lines (`expand=lettering,accounting_entry_counterpart,vat_amount,has_attachment`, `date`, `pcg_entry`, `account_number_prefixes` (`\|`), `journal_code` (`,`), `amount`, `lettered`, `validated`…). `amount` is **positive for a credit, negative for a debit**. Filter a fiscal year with `date`, not `accounting_period` |
+| `GET /expert/companies/{c}/movements/cumuls?pcg_entry=&date=` | `{count, total, total_debit, total_credit}` |
+| `GET /expert/companies/{c}/accounting_entries/{id}/movements` | Lines of an entry |
+| `POST /expert/companies/{c}/movements/validate`, `/unvalidate` | `{movements: [{id}]}` |
+| `GET /expert/companies/{c}/accounting_periods/{p}/balances` | Trial balance; balance = credit − debit; `amount=<0` for debit balances |
+| `GET /expert/companies/{c}/accounting_periods/{p}/results?items=accounting_result` | Accounting result |
+| `GET /expert/companies/{c}/pcg_entries`, `…/pcg_entries/{id}/balances` | Chart of accounts, balances of an account per fiscal year |
+| `GET /expert/companies/{c}/journals[?type=]` | Journals |
+| `GET /expert/companies/{c}/labels` | Categories of the client |
+| `GET /expert/companies/{c}/bank_transactions` | Transactions (`Accept: …bank_transactions.v2+json`, `expand=imputations`, `start_date=>=…`) |
+| `POST / DELETE /expert/companies/{c}/bank_transactions/accountant_detail_requests` | Receipt requests: `{type: "receipt", bank_transactions: [{id}]}`; the DELETE has a body `{type, accountant_detail_requests: [{id}]}` |
+
+### Follow-up
+
+| Method and route | Usage |
+|---|---|
+| `GET /expert/users/me/vat_declarations` | VAT planning; header `X-Total-Not-Configured-Company: true`, `expand=accounting_config`, `vat_declaration_status`, `vat_declaration_deadline_start_date`/`_end_date` (plain dates), `vat_declaration_consistency_check_status`… |
+| `GET /expert/companies/{c}/vat_declarations[/{id}]` | VAT declarations of a company |
+| `GET /expert/companies/{c}/vat_declarations/{id}/consistency_check` | `Accept: application/vnd.tiime.consistency_checks.v4+json` |
+| `POST /expert/companies/{c}/vat_declarations/{id}/pdf` | `{type}` → file (`vat_declaration`, `acknowledgment_receipt`, `fiscal_declaration`, `proofs_of_filing`, `vat_deposit`) |
+| `GET /expert/users/me/bilans` | Annual accounts planning (`bilan_status`, `accounting_period_end_date`…) |
+| `GET /expert/companies/{c}/bilans/{id}?expand=consistency_checks,metadatas` | Annual accounts |
+| `GET /expert/company_accounting_indicators` | Indicators per client (`expand=` the indicator codes); `id` is the indicator row, not the company |
+| `POST /expert/company_accounting_indicators/update` | `{company_ids: [c]}` recomputes |
+| `GET /expert/company_accounting_indicators/{id}/items_to_relaunch/bank_transactions` | Transactions waiting for a receipt |
+| `GET / POST /expert/companies/{c}/threads` | Threads (`status`, `category`, `types` + the entity ID under the name of its type); creation `{entity: {type, <type>: {id}}, interlocutors, messages: [{content}], category, tags}` |
+| `POST /expert/companies/{c}/threads/{id}/messages` | `{content}` |
+| `POST /expert/companies/{c}/threads/{id}/{read,close,unclose,archive,unarchive}` | No body |
+| `GET /expert/users/me/notifications[/count]`, `PATCH …/{id}`, `POST …/mark_all_as_read` | Notifications |
+
+### Deliberately not implemented (expert)
+
+| Route | Reason |
+|---|---|
+| `PATCH / PUT …/vat_declarations/{id}`, `POST …/fiscal_declarations/{id}/send`, `POST …/bilans/{id}/send` | Tax returns and annual accounts |
+| `POST …/movements`, `POST …/accounting_entries/{id}/movements`, `…/accounting_entry_imports` | Accounting entries |
+| `POST /expert/company_accounting_indicators/send` | Email to the client; the body names no company |

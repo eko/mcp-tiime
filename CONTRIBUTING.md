@@ -60,7 +60,7 @@ covered in [docs/mcp-clients.md](docs/mcp-clients.md).
 | `cmd/mcp-tiime` | Entry point, `login` and `check` commands, `uber-go/fx` wiring |
 | `internal/config` | Configuration with `viper` (`TIIME_*` variables) |
 | `internal/tiime` | Tiime API HTTP client, Auth0 authentication (MFA, PKCE) |
-| `internal/tools` | MCP tools, one interface and one file per domain |
+| `internal/tools` | MCP tools, one interface and one file per domain; `expert*.go` for the expert mode |
 | `docs/api-tiime.md` | Reverse-engineering notes on the Tiime API: routes, headers, formats, pitfalls |
 | `mcpb/` | Claude Desktop extension manifest |
 | `scripts/` | Release helpers |

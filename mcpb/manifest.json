@@ -28,7 +28,8 @@
       "env": {
         "TIIME_EMAIL": "${user_config.email}",
         "TIIME_PASSWORD": "${user_config.password}",
-        "TIIME_COMPANY_ID": "${user_config.company_id}"
+        "TIIME_COMPANY_ID": "${user_config.company_id}",
+        "TIIME_MODE": "${user_config.mode}"
       },
       "platform_overrides": {
         "win32": {
@@ -41,6 +42,13 @@
     "platforms": ["darwin", "win32"]
   },
   "user_config": {
+    "mode": {
+      "type": "string",
+      "title": "Mode",
+      "description": "client for a company account (apps.tiime.fr), expert for an accounting firm account (expert.tiime.fr, experimental).",
+      "default": "client",
+      "required": false
+    },
     "email": {
       "type": "string",
       "title": "Tiime email",

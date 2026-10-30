@@ -330,7 +330,7 @@ func Register(
 	server *mcp.Server,
 	h *Handler,
 ) {
-	registerAuth(server, h)
+	registerAuth(server, h.auth)
 	registerInvoicing(server, h)
 	registerBanking(server, h)
 	registerDocuments(server, h)
@@ -530,14 +530,23 @@ func (h *Handler) save(
 	name string,
 	content []byte,
 ) (string, error) {
-	if err := os.MkdirAll(h.downloadDir, 0o755); err != nil {
+	return saveFile(h.downloadDir, name, content)
+}
+
+// saveFile writes a downloaded file into dir.
+func saveFile(
+	dir string,
+	name string,
+	content []byte,
+) (string, error) {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf(
 			"creating download directory: %w",
 			err,
 		)
 	}
 
-	path := filepath.Join(h.downloadDir, name)
+	path := filepath.Join(dir, name)
 	if err := os.WriteFile(path, content, 0o644); err != nil {
 		return "", fmt.Errorf(
 			"writing %s: %w",

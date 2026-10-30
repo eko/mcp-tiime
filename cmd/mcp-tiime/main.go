@@ -54,7 +54,7 @@ func providers() fx.Option {
 		newHTTPClient,
 		newAuthenticator,
 		newClient,
-		newHandler,
+		newRegistrar,
 	)
 }
 
@@ -110,7 +110,11 @@ func newAuthenticator(
 	cfg config.Config,
 	httpClient *http.Client,
 ) *tiime.Authenticator {
+	// config.Load already rejected unknown modes.
+	app, _ := cfg.App()
+
 	return tiime.NewAuthenticator(tiime.AuthConfig{
+		App:        app,
 		AuthURL:    cfg.AuthURL,
 		ClientID:   cfg.ClientID,
 		Email:      cfg.Email,
@@ -125,29 +129,41 @@ func newClient(
 	auth *tiime.Authenticator,
 	httpClient *http.Client,
 ) *tiime.Client {
-	return tiime.NewClient(cfg.APIURL, cfg.AppVersion, auth, httpClient)
+	app, _ := cfg.App()
+
+	return tiime.NewClient(cfg.APIURL, cfg.AppVersion, auth, httpClient, tiime.WithAppHeader(app.Header))
 }
 
-func newHandler(
+// registrar adds the tools of the configured mode to the MCP server.
+type registrar func(server *mcp.Server)
+
+func newRegistrar(
 	cfg config.Config,
 	client *tiime.Client,
 	auth *tiime.Authenticator,
-) *tools.Handler {
-	return tools.NewHandler(client, auth, cfg.CompanyID, cfg.PDFDir)
+) registrar {
+	if cfg.Mode == config.ModeExpert {
+		handler := tools.NewExpertHandler(client, auth, cfg.CompanyID, cfg.PDFDir)
+		return func(server *mcp.Server) { tools.RegisterExpert(server, handler) }
+	}
+
+	handler := tools.NewHandler(client, auth, cfg.CompanyID, cfg.PDFDir)
+
+	return func(server *mcp.Server) { tools.Register(server, handler) }
 }
 
 func serve(
 	lc fx.Lifecycle,
 	shutdowner fx.Shutdowner,
 	logger *slog.Logger,
-	handler *tools.Handler,
+	register registrar,
 ) {
 	server := mcp.NewServer(&mcp.Implementation{
 		Name:    "mcp-tiime",
 		Title:   "Tiime",
 		Version: version,
 	}, &mcp.ServerOptions{Logger: logger})
-	tools.Register(server, handler)
+	register(server)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -218,8 +234,13 @@ func login(
 }
 
 func check(
+	cfg config.Config,
 	client *tiime.Client,
 ) error {
+	if cfg.Mode == config.ModeExpert {
+		return checkExpert(client)
+	}
+
 	companies, err := client.Companies(context.Background())
 	if err != nil {
 		return fmt.Errorf(
@@ -230,6 +251,28 @@ func check(
 
 	for _, company := range companies {
 		fmt.Printf("%d\t%s\n", company.ID, company.Name)
+	}
+
+	return nil
+}
+
+// checkExpert lists the first client companies of the accounting firm.
+func checkExpert(
+	client *tiime.Client,
+) error {
+	page, err := client.ExpertCompanies(context.Background(), tiime.ExpertQuery{Sort: "name:asc"}, tiime.Range{Limit: 20})
+	if err != nil {
+		return fmt.Errorf(
+			"checking Tiime Expert access: %w",
+			err,
+		)
+	}
+
+	for _, company := range page.Items {
+		fmt.Printf("%v\t%v\n", company["id"], company["name"])
+	}
+	if page.HasMore {
+		fmt.Println("…")
 	}
 
 	return nil

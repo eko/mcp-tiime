@@ -15,9 +15,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// fakeAuth0 simulates the Universal Login MFA pages used by Tiime.
+// fakeAuth0 simulates the Universal Login MFA pages used by Tiime for app.
 func fakeAuth0(
 	t *testing.T,
+	app App,
 	startOnCodePage bool,
 ) *httptest.Server {
 	t.Helper()
@@ -31,11 +32,14 @@ func fakeAuth0(
 
 		switch params["grant_type"] {
 		case passwordGrant:
+			if app.LoginFlowOnly {
+				t.Errorf("password grant sent for an application that refuses it")
+			}
 			w.WriteHeader(http.StatusForbidden)
 			_, _ = w.Write([]byte(`{"error":"mfa_required"}`))
 		case "authorization_code":
 			assert.Equal(t, "auth-code", params["code"])
-			assert.Equal(t, redirectURI, params["redirect_uri"])
+			assert.Equal(t, app.redirectURI(), params["redirect_uri"])
 			sum := sha256.Sum256([]byte(params["code_verifier"]))
 			assert.Equal(t, challenge, base64.RawURLEncoding.EncodeToString(sum[:]))
 			_, _ = w.Write([]byte(`{"access_token":"access","refresh_token":"refresh","expires_in":86400}`))
@@ -45,7 +49,7 @@ func fakeAuth0(
 	})
 
 	mux.HandleFunc("/co/authenticate", func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, webOrigin, r.Header.Get("Origin"))
+		assert.Equal(t, app.Origin, r.Header.Get("Origin"))
 		http.SetCookie(w, &http.Cookie{Name: "auth0", Value: "session", Path: "/"})
 		_, _ = w.Write([]byte(`{"login_ticket":"ticket"}`))
 	})
@@ -106,7 +110,7 @@ func fakeAuth0(
 	})
 
 	mux.HandleFunc("/authorize/resume", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, redirectURI+"?code=auth-code&state=x", http.StatusFound)
+		http.Redirect(w, r, app.redirectURI()+"?code=auth-code&state=x", http.StatusFound)
 	})
 
 	return httptest.NewServer(mux)
@@ -159,7 +163,7 @@ func TestAuthenticatorLogin(
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			server := fakeAuth0(t, testCase.startOnCodePage)
+			server := fakeAuth0(t, ClientApp, testCase.startOnCodePage)
 			defer server.Close()
 
 			cachePath := filepath.Join(t.TempDir(), "token.json")
@@ -209,6 +213,44 @@ func TestAuthenticatorLogin(
 			assert.Equal(t, "access", token)
 		})
 	}
+}
+
+func TestExpertLogin(
+	t *testing.T,
+) {
+	server := fakeAuth0(t, ExpertApp, false)
+	defer server.Close()
+
+	cachePath := filepath.Join(t.TempDir(), "token.json")
+	cfg := AuthConfig{
+		App:        ExpertApp,
+		AuthURL:    server.URL,
+		ClientID:   ExpertApp.ClientID,
+		Email:      "me@example.com",
+		Password:   "secret",
+		CachePath:  filepath.Join(t.TempDir(), "empty.json"),
+		HTTPClient: server.Client(),
+	}
+	ctx := context.Background()
+
+	// Without a session, the expert application never tries the password grant.
+	_, err := NewAuthenticator(cfg).AccessToken(ctx)
+	require.ErrorIs(t, err, ErrLoginRequired)
+
+	cfg.CachePath = cachePath
+	auth := NewAuthenticator(cfg)
+	challenge, err := auth.StartLogin(ctx, "")
+	require.NoError(t, err)
+	require.NotNil(t, challenge)
+	assert.Equal(t, "email", challenge.Method)
+
+	challenge, err = auth.CompleteLogin(ctx, "123456")
+	require.NoError(t, err)
+	assert.Nil(t, challenge)
+
+	token, err := NewAuthenticator(cfg).AccessToken(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "access", token)
 }
 
 func TestCompleteLoginWithoutPendingLogin(

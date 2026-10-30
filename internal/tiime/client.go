@@ -41,9 +41,23 @@ func (e *APIError) Error() string {
 // Client calls the Tiime API.
 type Client struct {
 	baseURL    string
+	appHeader  string
 	appVersion string
 	tokens     TokenProvider
 	httpClient *http.Client
+}
+
+// ClientOption customizes a Client.
+type ClientOption func(*Client)
+
+// WithAppHeader sets the tiime-app header, which identifies the web
+// application ("tiime" by default, "tiime-pro" for accounting firms).
+func WithAppHeader(
+	header string,
+) ClientOption {
+	return func(c *Client) {
+		c.appHeader = header
+	}
 }
 
 // NewClient creates a Tiime API client.
@@ -52,17 +66,24 @@ func NewClient(
 	appVersion string,
 	tokens TokenProvider,
 	httpClient *http.Client,
+	opts ...ClientOption,
 ) *Client {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
 
-	return &Client{
+	client := &Client{
 		baseURL:    strings.TrimRight(baseURL, "/"),
+		appHeader:  ClientApp.Header,
 		appVersion: appVersion,
 		tokens:     tokens,
 		httpClient: httpClient,
 	}
+	for _, opt := range opts {
+		opt(client)
+	}
+
+	return client
 }
 
 // Companies lists the companies the user has access to.
@@ -432,8 +453,8 @@ func (c *Client) send(
 
 	httpReq.Header.Set("Authorization", "Bearer "+token)
 	httpReq.Header.Set("Accept", "application/json")
-	// Same application headers as the apps.tiime.fr web client.
-	httpReq.Header.Set("tiime-app", "tiime")
+	// Same application headers as the Tiime web application.
+	httpReq.Header.Set("tiime-app", c.appHeader)
 	httpReq.Header.Set("tiime-app-platform", "web")
 	httpReq.Header.Set("tiime-app-version", c.appVersion)
 	if req.contentType != "" {

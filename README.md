@@ -2,7 +2,8 @@
 
 A Go [MCP](https://modelcontextprotocol.io) server to drive [Tiime](https://www.tiime.fr) from
 Claude or any MCP agent: invoicing, banking, receipts, expense reports, VAT and exchanges with
-the accounting firm. **92 tools**, MFA login included.
+the accounting firm. **92 tools**, MFA login included. Accounting firms using Tiime Expert can
+switch to an experimental [expert mode](docs/expert-mode.md) (43 tools across their portfolio).
 
 > ⚠️ Tiime does not publish an API. This server uses the **internal** API of the
 > `apps.tiime.fr` web application (`chronos-api.tiime-apps.com/v1`). Routes and formats were
@@ -15,6 +16,7 @@ the accounting firm. **92 tools**, MFA login included.
 - [Quick start](#quick-start)
 - [Example requests](#example-requests)
 - [Tools](#tools)
+- [Accounting firms (expert mode)](#accounting-firms-expert-mode)
 - [Write safety](#write-safety)
 - [Authentication and MFA](#authentication-and-mfa)
 - [Configuration](#configuration)
@@ -215,6 +217,19 @@ The **Tested** column shows what was checked against a real account: ✅ validat
 | `answer_document_request`, `declare_document_unavailable` | Answers a request, or declares a document unavailable with a reason | ⬜ |
 | `list_threads`, `get_thread`, `post_thread_message`, `mark_thread_read` | Discussion threads with the firm | 🟡 |
 
+## Accounting firms (expert mode)
+
+With `TIIME_MODE=expert`, the server acts as an accounting firm on `expert.tiime.fr` instead of a
+company: portfolio of client companies, task plannings, time tracking, VAT and annual accounts
+plannings, accounting of each client (entries, trial balance, general ledger), receipt requests
+and messaging with the clients. **Experimental: built from the web application code, not yet run
+against a real firm account.** See the [expert mode guide](docs/expert-mode.md).
+
+```bash
+TIIME_MODE=expert ./bin/mcp-tiime login
+claude mcp add tiime-expert -e TIIME_MODE=expert -- "$PWD/bin/mcp-tiime"
+```
+
 ## Write safety
 
 - Every tool carries MCP annotations: 38 are read-only (`readOnlyHint`) and 12 are marked
@@ -252,11 +267,12 @@ All variables are optional.
 
 | Variable | Default | Purpose |
 |---|---|---|
+| `TIIME_MODE` | `client` | `client` for a company (`apps.tiime.fr`), `expert` for an accounting firm (`expert.tiime.fr`, experimental, see [expert mode](docs/expert-mode.md)) |
 | `TIIME_EMAIL`, `TIIME_PASSWORD` | — | Credentials, needed for `start_login` |
 | `TIIME_COMPANY_ID` | detected | Default company, not needed when the account has a single one |
 | `TIIME_PDF_DIR` | `~/Downloads` | Download directory (invoice PDFs, documents, exports) |
-| `TIIME_TOKEN_CACHE` | `~/.config/mcp-tiime/token.json` | Session cache |
-| `TIIME_APP_VERSION` | `4.40.6` | `tiime-app-version` header, aligned with the web application |
+| `TIIME_TOKEN_CACHE` | `~/.config/mcp-tiime/token.json` (`token-expert.json` in expert mode) | Session cache |
+| `TIIME_APP_VERSION` | version of the web application of the mode | `tiime-app-version` header, aligned with the web application |
 | `TIIME_LOG_LEVEL` | `info` | Log level (JSON on stderr) |
 | `TIIME_API_URL`, `TIIME_AUTH_URL`, `TIIME_CLIENT_ID` | web application values | Overrides in case Tiime changes them |
 
