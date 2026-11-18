@@ -255,8 +255,14 @@ Two ways to log in when the account has two-factor authentication:
   emails a code. The agent reads it with a mail tool (for instance a Gmail MCP, looking for the
   message received after `sent_at`), then calls `complete_login`. The password stays in the
   server environment and never goes through the agent.
-- **In a terminal**: `./bin/mcp-tiime login [email|sms|otp]` asks for the email and password
+- **In a terminal**: `./bin/mcp-tiime login [email|sms|otp|push]` asks for the email and password
   (hidden input) when they are not in the environment, then for the code.
+
+Accounts that approve logins with a **push notification** in the Tiime mobile app work too.
+`mcp-tiime login push` (or `login` alone, when push is the account's default) waits for the
+approval on the device and checks every 5 seconds for up to 3 minutes: no code to type. Through
+an agent, `start_login` returns `approval_required`: approve the notification, then call
+`complete_login` with an empty code.
 
 The login goes through the Auth0 Universal Login, like the web application, with PKCE.
 Treat the cache as a secret: it grants access to the account.
@@ -274,6 +280,7 @@ All variables are optional.
 | `TIIME_TOKEN_CACHE` | `~/.config/mcp-tiime/token.json` (`token-expert.json` in expert mode) | Session cache |
 | `TIIME_APP_VERSION` | version of the web application of the mode | `tiime-app-version` header, aligned with the web application |
 | `TIIME_LOG_LEVEL` | `info` | Log level (JSON on stderr) |
+| `TIIME_LOGIN_DEBUG` | — | File where an unsupported login page is saved, long values (state, tokens) redacted, to report a login change |
 | `TIIME_API_URL`, `TIIME_AUTH_URL`, `TIIME_CLIENT_ID` | web application values | Overrides in case Tiime changes them |
 
 ## Behaviors to know

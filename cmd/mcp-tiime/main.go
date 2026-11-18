@@ -1,6 +1,6 @@
 // Command mcp-tiime runs an MCP server exposing Tiime data over stdio.
 //
-// Run "mcp-tiime login [email|sms|otp]" to authenticate from a terminal (MFA
+// Run "mcp-tiime login [email|sms|otp|push]" to authenticate from a terminal (MFA
 // included) and cache a refresh token, and "mcp-tiime check" to list the
 // accessible companies. AI agents can log in with the start_login and
 // complete_login tools instead.
@@ -217,6 +217,10 @@ func login(
 	auth := newAuthenticator(cfg, httpClient)
 	challenge, err := auth.StartLogin(ctx, method)
 	for err == nil && challenge != nil {
+		if challenge.Method == tiime.PushMFAMethod {
+			challenge, err = waitForPush(ctx, auth, challenge)
+			continue
+		}
 		var code string
 		code, err = prompter.Prompt(ctx, challenge.Message+"\nVerification code")
 		if err != nil {
@@ -231,6 +235,39 @@ func login(
 	fmt.Fprintln(os.Stderr, "Logged in. Session saved to", cfg.TokenCache)
 
 	return nil
+}
+
+const (
+	pushPollInterval = 5 * time.Second
+	pushTimeout      = 3 * time.Minute
+)
+
+// waitForPush checks every few seconds whether the push notification was
+// approved in the Tiime app, so no key has to be pressed. It returns the next
+// challenge when Tiime asks for something else, and nil once logged in.
+func waitForPush(
+	ctx context.Context,
+	auth *tiime.Authenticator,
+	challenge *tiime.LoginChallenge,
+) (*tiime.LoginChallenge, error) {
+	fmt.Fprintln(os.Stderr, challenge.Message)
+	fmt.Fprintln(os.Stderr, "Approve the notification in the Tiime app. Waiting for the approval (Ctrl-C to stop)...")
+
+	deadline := time.Now().Add(pushTimeout)
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(pushPollInterval):
+		}
+
+		next, err := auth.CompleteLogin(ctx, "")
+		if err != nil || next == nil || next.Method != tiime.PushMFAMethod {
+			return next, err
+		}
+	}
+
+	return nil, fmt.Errorf("push notification not approved within %s: run the login again", pushTimeout)
 }
 
 func check(

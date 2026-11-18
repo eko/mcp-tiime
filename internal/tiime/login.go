@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"regexp"
 	"slices"
 	"strings"
@@ -23,6 +24,11 @@ import (
 const (
 	// DefaultMFAMethod is the verification method chosen when none is requested.
 	DefaultMFAMethod = "email"
+
+	// PushMFAMethod is the push notification approved in the Tiime mobile
+	// application. It expects no code: the user approves on the device, then
+	// CompleteLogin is called with an empty code.
+	PushMFAMethod = "push"
 
 	maxLoginSteps = 20
 )
@@ -74,13 +80,15 @@ func (a *Authenticator) StartLogin(
 		}
 	}
 
-	if method == "" {
+	explicit := method != ""
+	if !explicit {
 		method = DefaultMFAMethod
 	}
 	flow, err := newLoginFlow(a.cfg, method, a.now)
 	if err != nil {
 		return nil, err
 	}
+	flow.explicit = explicit
 
 	if err := flow.start(ctx); err != nil {
 		return nil, err
@@ -149,6 +157,9 @@ type loginFlow struct {
 	now      func() time.Time
 	page     loginPage
 	switched bool
+	// explicit is true when the user asked for the method, so a push page is
+	// only left for another method on request.
+	explicit bool
 }
 
 type loginPage struct {
@@ -237,10 +248,29 @@ func (f *loginFlow) advance(
 		}
 		choices := actionChoices(page.body)
 		methods := methodChoices(choices)
+		current := challengeMethod(page.url)
+		canSwitch := slices.ContainsFunc(choices, func(c choice) bool { return c.value == "pick-authenticator" })
+
+		if current == PushMFAMethod {
+			if f.explicit && f.method != PushMFAMethod && canSwitch && !f.switched {
+				f.switched = true
+				if f.page, err = f.postForm(ctx, page.url, url.Values{"state": {state}, "action": {"pick-authenticator"}}); err != nil {
+					return "", nil, err
+				}
+				continue
+			}
+			if _, ok := pushForm(page.body); !ok {
+				return "", nil, unsupportedPage(page, choices)
+			}
+
+			return "", &LoginChallenge{
+				Method:  PushMFAMethod,
+				Message: truncate(pageText(page.body), 300),
+				SentAt:  f.now(),
+			}, nil
+		}
 
 		if codeInput.MatchString(page.body) {
-			current := challengeMethod(page.url)
-			canSwitch := slices.ContainsFunc(choices, func(c choice) bool { return c.value == "pick-authenticator" })
 			if current != f.method && canSwitch && !f.switched {
 				f.switched = true
 				if f.page, err = f.postForm(ctx, page.url, url.Values{"state": {state}, "action": {"pick-authenticator"}}); err != nil {
@@ -257,7 +287,7 @@ func (f *loginFlow) advance(
 		}
 
 		if len(methods) == 0 {
-			return "", nil, fmt.Errorf("unsupported Tiime login page (%d): %s", page.status, truncate(pageText(page.body), 300))
+			return "", nil, unsupportedPage(page, choices)
 		}
 
 		action, ok := pickMethod(methods, f.method)
@@ -283,6 +313,21 @@ func (f *loginFlow) submitCode(
 ) error {
 	state, err := pageState(f.page)
 	if err != nil {
+		return err
+	}
+
+	// A push challenge has no code: confirm that the notification was
+	// approved. Tiime shows the page again while it is still pending.
+	if challengeMethod(f.page.url) == PushMFAMethod {
+		fields, ok := pushForm(f.page.body)
+		if !ok {
+			return unsupportedPage(f.page, actionChoices(f.page.body))
+		}
+		if fields.Get("state") == "" {
+			fields.Set("state", state)
+		}
+		f.page, err = f.postForm(ctx, f.page.url, fields)
+
 		return err
 	}
 
@@ -448,8 +493,137 @@ func methodNames(
 	return names
 }
 
+var (
+	formBlock  = regexp.MustCompile(`(?is)<form\b[^>]*>(.*?)</form>`)
+	inputTag   = regexp.MustCompile(`(?is)<input\b[^>]*>`)
+	buttonTag  = regexp.MustCompile(`(?is)<button\b([^>]*)>(.*?)</button>`)
+	longValues = regexp.MustCompile(`(?i)(value|content)="[^"]{20,}"`)
+)
+
+// pushSecondary matches the push page controls that do not confirm the
+// approval: resend, another method, enter a code.
+var pushSecondary = regexp.MustCompile(`(?i)resend|renvoyer|pick-authenticator|another|autre m|enter-otp|manually|manuellement`)
+
+// pushConfirm matches the control confirming the approval, e.g. "J'ai répondu
+// sur mon appareil" or "I've responded on my device".
+var pushConfirm = regexp.MustCompile(`(?i)répondu|responded|"default"`)
+
+// pushForm returns the fields of the push page form that confirms the
+// notification was approved, whatever the order of the HTML attributes.
+func pushForm(
+	body string,
+) (url.Values, bool) {
+	var candidates []string
+	for _, match := range formBlock.FindAllStringSubmatch(body, -1) {
+		if pushSecondary.MatchString(match[1]) && !pushConfirm.MatchString(match[1]) {
+			continue
+		}
+		candidates = append(candidates, match[1])
+	}
+	slices.SortStableFunc(candidates, func(a, b string) int {
+		return boolRank(pushConfirm.MatchString(b)) - boolRank(pushConfirm.MatchString(a))
+	})
+	if len(candidates) == 0 {
+		return nil, false
+	}
+
+	form := candidates[0]
+	fields := url.Values{}
+	for _, input := range inputTag.FindAllString(form, -1) {
+		name := attribute(input, "name")
+		kind := strings.ToLower(attribute(input, "type"))
+		if name == "" || name == "code" {
+			continue
+		}
+		switch kind {
+		case "checkbox", "radio":
+			continue
+		case "submit":
+			if pushSecondary.MatchString(input) {
+				continue
+			}
+		}
+		fields.Set(name, html.UnescapeString(attribute(input, "value")))
+	}
+	for _, button := range buttonTag.FindAllStringSubmatch(form, -1) {
+		if pushSecondary.MatchString(button[0]) && !pushConfirm.MatchString(button[0]) {
+			continue
+		}
+		if name := attribute(button[1], "name"); name != "" {
+			fields.Set(name, html.UnescapeString(attribute(button[1], "value")))
+		}
+		break
+	}
+	if fields.Get("action") == "" {
+		fields.Set("action", "default")
+	}
+
+	return fields, true
+}
+
+func boolRank(
+	b bool,
+) int {
+	if b {
+		return 1
+	}
+
+	return 0
+}
+
+// attribute reads an HTML attribute of a tag, whatever its position.
+func attribute(
+	tag string,
+	name string,
+) string {
+	match := regexp.MustCompile(`(?is)\b` + regexp.QuoteMeta(name) + `\s*=\s*(?:"([^"]*)"|'([^']*)')`).FindStringSubmatch(tag)
+	if match == nil {
+		return ""
+	}
+
+	return match[1] + match[2]
+}
+
+// unsupportedPage reports a login page the flow cannot handle, with its
+// action buttons to help support it. When TIIME_LOGIN_DEBUG names a file, the
+// page is saved there with its long values (state, tokens) redacted.
+func unsupportedPage(
+	page loginPage,
+	choices []choice,
+) error {
+	actions := make([]string, 0, len(choices))
+	for _, c := range choices {
+		actions = append(actions, c.value)
+	}
+
+	if path := os.Getenv("TIIME_LOGIN_DEBUG"); path != "" {
+		redacted := longValues.ReplaceAllString(page.body, `$1="REDACTED"`)
+		_ = os.WriteFile(path, []byte(redacted), 0o600)
+	}
+
+	return fmt.Errorf(
+		"unsupported Tiime login page (%d, %s, actions: %s): %s",
+		page.status,
+		pagePath(page.url),
+		strings.Join(actions, ", "),
+		truncate(pageText(page.body), 300),
+	)
+}
+
+// pagePath returns the path of a login page URL, without its state.
+func pagePath(
+	pageURL string,
+) string {
+	parsed, err := url.Parse(pageURL)
+	if err != nil {
+		return ""
+	}
+
+	return parsed.Path
+}
+
 // challengeMethod reads the method from a challenge page URL such as
-// /u/mfa-email-challenge.
+// /u/mfa-email-challenge or /u/mfa-push-challenge-push.
 func challengeMethod(
 	pageURL string,
 ) string {
