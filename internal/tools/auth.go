@@ -23,17 +23,17 @@ type Auth interface {
 
 // StartLoginInput selects the MFA method.
 type StartLoginInput struct {
-	Method string `json:"method,omitempty" jsonschema:"MFA verification method: email (default), sms or otp"`
+	Method string `json:"method,omitempty" jsonschema:"MFA verification method: email (default), sms, otp or push"`
 }
 
 // CompleteLoginInput carries the verification code.
 type CompleteLoginInput struct {
-	Code string `json:"code" jsonschema:"Verification code received from Tiime"`
+	Code string `json:"code,omitempty" jsonschema:"Verification code received from Tiime, empty for a push notification"`
 }
 
 // LoginOutput reports the state of the login.
 type LoginOutput struct {
-	// Status is "logged_in" or "code_required".
+	// Status is "logged_in", "code_required" or "approval_required" (push).
 	Status  string `json:"status"`
 	Method  string `json:"method,omitempty"`
 	Message string `json:"message,omitempty"`
@@ -57,12 +57,14 @@ func registerAuth(
 		Description: "Log in to Tiime with the credentials configured on the server. Call it when another Tiime tool fails " +
 			"because the session is missing or expired. When MFA is enabled, Tiime sends a verification code " +
 			"(by email by default): read it from the mailbox, in the Tiime message received after sent_at, " +
-			"then call complete_login with it.",
+			"then call complete_login with it. With the push method (status approval_required), ask the user to " +
+			"approve the notification in the Tiime app, then call complete_login with an empty code.",
 	}, h.StartLogin)
 
 	mcp.AddTool(server, &mcp.Tool{
-		Name:        "complete_login",
-		Description: "Submit the Tiime MFA verification code requested by start_login. On a wrong code, a new challenge is returned and the call can be retried.",
+		Name: "complete_login",
+		Description: "Submit the Tiime MFA verification code requested by start_login, or an empty code once a push " +
+			"notification was approved. On a wrong code or a pending push, a new challenge is returned and the call can be retried.",
 	}, h.CompleteLogin)
 }
 
@@ -101,6 +103,16 @@ func loginOutput(
 		return LoginOutput{
 			Status: "logged_in",
 			Next:   "The session is cached: retry the Tiime tool that failed.",
+		}
+	}
+
+	if challenge.Method == tiime.PushMFAMethod {
+		return LoginOutput{
+			Status:  "approval_required",
+			Method:  challenge.Method,
+			Message: challenge.Message,
+			SentAt:  challenge.SentAt.UTC().Format(time.RFC3339),
+			Next:    "Ask the user to approve the Tiime notification on their device, then call complete_login with an empty code.",
 		}
 	}
 
